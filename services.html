@@ -1,0 +1,133 @@
+<html>
+
+<head>
+    <title>IceWarp API Test</title>
+    <!-- Bootstrap CSS ve Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="templates.js"></script>
+    <script>
+        let sessionId = '';
+
+        // Sayfa yüklendiğinde
+        $(document).ready(function () {
+            Utils.initializeTooltips();
+        });
+
+        async function sendQuery() {
+            const button = document.querySelector('#sendButton');
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Gönderiliyor...';
+
+            try {
+                const input = $('#input').val();
+                const response = await Utils.sendAPIRequest(input);
+
+                const $iq = $(response).find('iq');
+                if ($iq.length > 0 && $iq.attr('sid')) {
+                    sessionId = $iq.attr('sid');
+                    window.sessionId = sessionId; // Utils.checkSession için gerekli
+                    console.log('Session ID:', sessionId);
+                    Utils.showToast('Oturum başarıyla açıldı!', 'success');
+                }
+            } finally {
+                button.disabled = false;
+                button.innerHTML = 'Gönder';
+            }
+        }
+
+        function getAuthExample() {
+            $('#input').val(XML_TEMPLATES.authenticate);
+        }
+
+        function getUser() {
+            if (Utils.checkSession()) {
+                $('#input').val(XML_TEMPLATES.getUsers(sessionId));
+            }
+        }
+
+        function getDomainList() {
+            if (Utils.checkSession()) {
+                $('#input').val(XML_TEMPLATES.getDomains(sessionId));
+            }
+        }
+
+        function getServerInfo() {
+            if (Utils.checkSession()) {
+                $('#input').val(XML_TEMPLATES.getServerInfo(sessionId));
+            }
+        }
+
+        function createUser() {
+            if (Utils.checkSession()) {
+                $('#input').val(XML_TEMPLATES.createUser(sessionId));
+            }
+        }
+    </script>
+</head>
+
+<body style="background-color: #f8f9fa;">
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Tek Panel - API Test -->
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">IceWarp API Test Arayüzü</h5>
+                    </div>
+                    <div class="card-body">
+                        <form onsubmit="return false;">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="getAuthExample()"
+                                    data-bs-toggle="tooltip" title="Oturum Açma">
+                                    <i class="bi bi-key"></i> Auth
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="getUser()"
+                                    data-bs-toggle="tooltip" title="Kullanıcı Listesi">
+                                    <i class="bi bi-person"></i> Kullanıcılar
+                                </button>
+                                <button type="button" class="btn btn-outline-success" onclick="getDomainList()"
+                                    data-bs-toggle="tooltip" title="Domain Listesi">
+                                    <i class="bi bi-globe"></i> Domainler
+                                </button>
+                                <button type="button" class="btn btn-outline-info" onclick="getServerInfo()"
+                                    data-bs-toggle="tooltip" title="Sunucu Bilgisi">
+                                    <i class="bi bi-server"></i> Sunucu Bilgisi
+                                </button>
+                                <button type="button" class="btn btn-outline-warning" onclick="createUser()"
+                                    data-bs-toggle="tooltip" title="Yeni Kullanıcı Ekle">
+                                    <i class="bi bi-person-plus"></i> Kullanıcı Ekle
+                                </button>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="input" class="form-label">API İsteği:</label>
+                                <textarea id="input" class="form-control" style="font-family: monospace;"
+                                    rows="8"></textarea>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="response" class="form-label">Sunucu Yanıtı:</label>
+                                <textarea id="response" class="form-control" style="font-family: monospace;" rows="8"
+                                    readonly></textarea>
+                            </div>
+
+                            <button id="sendButton" type="button" class="btn btn-primary" onclick="sendQuery()">
+                                <i class="bi bi-send"></i> Gönder
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
