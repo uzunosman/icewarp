@@ -1,0 +1,219 @@
+<html>
+
+<head>
+    <title>IceWarp API Test</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+
+        .card {
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .response-area {
+            background-color: #f8f9fa;
+            font-family: monospace;
+        }
+
+        .btn-group {
+            margin-bottom: 20px;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let sessionId = '';
+
+        function sendQuery() {
+            const button = document.querySelector('#sendButton');
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Gönderiliyor...';
+
+            var input = $('#input').val();
+            $.ajax({
+                type: "POST",
+                url: 'http://localhost/icewarpapi/',
+                data: input,
+                success: function (data) {
+                    // XML'i string'e çevirip formatlayalım
+                    let xmlString = new XMLSerializer().serializeToString(data);
+                    // XML'i pretty print yapalım
+                    xmlString = formatXML(xmlString);
+                    $('#response').text(xmlString);
+                    console.log('Response:', xmlString);
+
+                    // Session ID'yi alalım
+                    const $iq = $(data).find('iq');
+                    if ($iq.length > 0 && $iq.attr('sid')) {
+                        sessionId = $iq.attr('sid');
+                        console.log('Session ID:', sessionId);
+                        showToast('Oturum başarıyla açıldı!', 'success');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error:', error);
+                    $('#response').text('Hata: ' + error);
+                    showToast('Bir hata oluştu: ' + error, 'danger');
+                },
+                complete: function () {
+                    button.disabled = false;
+                    button.innerHTML = 'Gönder';
+                }
+            });
+        }
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+
+            document.getElementById('toast-container').appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+
+            toast.addEventListener('hidden.bs.toast', function () {
+                toast.remove();
+            });
+        }
+
+        function getAuthExample() {
+            var authXML = `<iq>
+    <query xmlns="admin:iq:rpc">
+        <commandname>authenticate</commandname>
+        <commandparams>
+            <authtype>0</authtype>
+            <email>api_admin@api.test</email>
+            <password>cjcap3</password>
+            <digest></digest>
+            <persistentlogin>0</persistentlogin>
+            <appversion>23.0.1</appversion>
+            <platform>windows</platform>
+        </commandparams>
+    </query>
+</iq>`;
+            $('#input').val(authXML);
+        }
+
+        function getUser() {
+            if (!sessionId) {
+                showToast('Önce authentication yapmalısınız!', 'warning');
+                return;
+            }
+
+            const userXML = `<iq sid="${sessionId}">
+    <query xmlns="admin:iq:rpc">
+        <commandname>getaccountsinfolist</commandname>
+        <commandparams>
+            <domainstr>api.test</domainstr>
+            <filter>
+                <namemask>*</namemask>
+                <typemask>*</typemask>
+            </filter>
+            <offset>0</offset>
+            <count>100</count>
+        </commandparams>
+    </query>
+</iq>`;
+
+            $('#input').val(userXML);
+        }
+
+        // XML formatlama fonksiyonu
+        function formatXML(xml) {
+            let formatted = '';
+            let reg = /(>)(<)(\/*)/g;
+            xml = xml.replace(reg, '$1\r\n$2$3');
+            let pad = 0;
+
+            xml.split('\r\n').forEach(function (node) {
+                let indent = 0;
+                if (node.match(/.+<\/\w[^>]*>$/)) {
+                    indent = 0;
+                } else if (node.match(/^<\/\w/)) {
+                    if (pad != 0) pad -= 4;
+                } else if (node.match(/^<\w[^>]*[^\/]>.*$/)) {
+                    indent = 4;
+                } else {
+                    indent = 0;
+                }
+
+                let padding = '';
+                for (let i = 0; i < pad; i++) {
+                    padding += ' ';
+                }
+
+                formatted += padding + node + '\r\n';
+                pad += indent;
+            });
+
+            return formatted;
+        }
+    </script>
+</head>
+
+<body>
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">IceWarp API Test Arayüzü</h5>
+                    </div>
+                    <div class="card-body">
+                        <form onsubmit="return false;">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="getAuthExample()">
+                                    <i class="bi bi-key"></i> Auth XML Örneği
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="getUser()">
+                                    <i class="bi bi-person"></i> Kullanıcı Sorgula
+                                </button>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="input" class="form-label">API İsteği:</label>
+                                <textarea id="input" class="form-control response-area" rows="10"><iq>
+    <query xmlns="admin:iq:rpc">
+        <commandname>getauthchallenge</commandname>
+        <commandparams>
+            <authtype>1</authtype>
+        </commandparams>
+    </query>
+</iq></textarea>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="response" class="form-label">Sunucu Yanıtı:</label>
+                                <textarea id="response" class="form-control response-area" rows="10"
+                                    readonly></textarea>
+                            </div>
+
+                            <button id="sendButton" type="button" class="btn btn-primary" onclick="sendQuery()">
+                                Gönder
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
