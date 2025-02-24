@@ -67,6 +67,77 @@
                 $('#input').val(XML_TEMPLATES.createUser(sessionId));
             }
         }
+
+        let userModal;
+        let isEditMode = false;
+
+        $(document).ready(function () {
+            Utils.initializeTooltips();
+            userModal = new bootstrap.Modal(document.getElementById('userModal'));
+        });
+
+        function showCreateUserModal() {
+            isEditMode = false;
+            document.getElementById('userForm').reset();
+
+            // Default değerleri set et
+            const timestamp = new Date().getTime();
+            document.getElementById('username').value = `test${timestamp}`;
+            document.getElementById('displayName').value = `Test User ${timestamp}`;
+            document.getElementById('password').value = 'test123!';
+            document.getElementById('quota').value = '1024';
+
+            userModal.show();
+        }
+
+        function showEditUserModal(userData) {
+            isEditMode = true;
+            const [username] = userData.email.split('@');
+            document.getElementById('userEmail').value = userData.email;
+            document.getElementById('username').value = username;
+            document.getElementById('displayName').value = userData.displayName;
+            document.getElementById('quota').value = userData.quota;
+            userModal.show();
+        }
+
+        async function saveUser() {
+            if (!Utils.checkSession()) return;
+
+            const userData = {
+                username: document.getElementById('username').value,
+                displayName: document.getElementById('displayName').value,
+                password: document.getElementById('password').value,
+                quota: document.getElementById('quota').value
+            };
+
+            if (isEditMode) {
+                userData.email = document.getElementById('userEmail').value;
+                $('#input').val(XML_TEMPLATES.updateUser(sessionId, userData));
+            } else {
+                $('#input').val(XML_TEMPLATES.createUser(sessionId, userData));
+            }
+
+            userModal.hide();
+            await sendQuery();
+            await listUsers(); // Listeyi güncelle
+        }
+
+        async function deleteUser(email) {
+            if (!Utils.checkSession()) return;
+
+            if (confirm(`${email} kullanıcısını silmek istediğinizden emin misiniz?`)) {
+                $('#input').val(XML_TEMPLATES.deleteUser(sessionId, email));
+                await sendQuery();
+                await listUsers(); // Listeyi güncelle
+            }
+        }
+
+        async function listUsers() {
+            if (!Utils.checkSession()) return;
+
+            $('#input').val(XML_TEMPLATES.getUsers(sessionId));
+            await sendQuery();
+        }
     </script>
 </head>
 
@@ -101,7 +172,7 @@
                                     data-bs-toggle="tooltip" title="Sunucu Bilgisi">
                                     <i class="bi bi-server"></i> Sunucu Bilgisi
                                 </button>
-                                <button type="button" class="btn btn-outline-warning" onclick="createUser()"
+                                <button type="button" class="btn btn-outline-warning" onclick="showCreateUserModal()"
                                     data-bs-toggle="tooltip" title="Yeni Kullanıcı Ekle">
                                     <i class="bi bi-person-plus"></i> Kullanıcı Ekle
                                 </button>
@@ -124,6 +195,43 @@
                             </button>
                         </form>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kullanıcı işlemleri için modal -->
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Kullanıcı Ekle/Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="userForm">
+                        <input type="hidden" id="userEmail">
+                        <div class="mb-3">
+                            <label class="form-label">Kullanıcı Adı</label>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Görünen Ad</label>
+                            <input type="text" class="form-control" id="displayName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Şifre</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Kota (MB)</label>
+                            <input type="number" class="form-control" id="quota" value="1024">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUser()">Kaydet</button>
                 </div>
             </div>
         </div>

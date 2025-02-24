@@ -18,7 +18,7 @@ const XML_TEMPLATES = {
     <query xmlns="admin:iq:rpc">
         <commandname>getaccountsinfolist</commandname>
         <commandparams>
-            <domainstr>api.test</domainstr>
+            <domainstr>${CONFIG.DOMAIN}</domainstr>
             <filter>
                 <namemask>*</namemask>
                 <typemask>*</typemask>
@@ -31,36 +31,73 @@ const XML_TEMPLATES = {
 
     getDomains: (sessionId) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>getdomainlist</commandname>
-        <commandparams/>
+        <commandname>getdomains</commandname>
+        <commandparams>
+            <listtype>0</listtype>
+            <listparams>
+                <domain>*</domain>
+            </listparams>
+        </commandparams>
     </query>
 </iq>`,
 
     getServerInfo: (sessionId) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>getserverinfo</commandname>
-        <commandparams/>
+        <commandname>getserviceinfo</commandname>
+        <commandparams>
+            <info>
+                <item>version</item>
+                <item>build</item>
+                <item>os</item>
+                <item>platform</item>
+                <item>installpath</item>
+                <item>licenseid</item>
+            </info>
+        </commandparams>
     </query>
 </iq>`,
 
-    createUser: (sessionId) => `<iq sid="${sessionId}">
+    createUser: (sessionId, userData) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>createaccount</commandname>
+        <commandname>createobject</commandname>
         <commandparams>
-            <domainname>api.test</domainname>
-            <username>yeni.kullanici</username>
-            <pass>Sifre123!</pass>
-            <displayname>Yeni Kullanıcı</displayname>
-            <quota>1024</quota>
-            <type>0</type>
-            <enabled>1</enabled>
-            <services>
-                <service name="mail">1</service>
-                <service name="im">1</service>
-                <service name="groupware">1</service>
-                <service name="ftp">1</service>
-                <service name="sip">1</service>
-            </services>
+            <account>
+                <domain>${CONFIG.DOMAIN}</domain>
+                <name>${userData.username}</name>
+                <password>${userData.password}</password>
+                <displayname>${userData.displayName}</displayname>
+                <quota>${userData.quota || 1024}</quota>
+                <type>0</type>
+                <enabled>1</enabled>
+                <services>
+                    <service name="mail">1</service>
+                    <service name="im">1</service>
+                    <service name="groupware">1</service>
+                    <service name="ftp">1</service>
+                    <service name="sip">1</service>
+                </services>
+            </account>
+        </commandparams>
+    </query>
+</iq>`,
+
+    updateUser: (sessionId, userData) => `<iq sid="${sessionId}">
+    <query xmlns="admin:iq:rpc">
+        <commandname>modifyaccount</commandname>
+        <commandparams>
+            <email>${userData.email}</email>
+            <displayname>${userData.displayName}</displayname>
+            <pass>${userData.password}</pass>
+            <quota>${userData.quota}</quota>
+        </commandparams>
+    </query>
+</iq>`,
+
+    deleteUser: (sessionId, email) => `<iq sid="${sessionId}">
+    <query xmlns="admin:iq:rpc">
+        <commandname>deleteaccount</commandname>
+        <commandparams>
+            <email>${email}</email>
         </commandparams>
     </query>
 </iq>`
