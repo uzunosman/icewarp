@@ -34,6 +34,15 @@
                     console.log('Session ID:', sessionId);
                     Utils.showToast('Oturum başarıyla açıldı!', 'success');
                 }
+
+                // Eğer input kullanıcı listesi sorgusuysa, listeyi güncelle
+                if (input.includes('getaccountsinfolist')) {
+                    await listUsers(response); // response'u parametre olarak geçiriyoruz
+                }
+
+                // Response'u textarea'ya yazdır
+                document.getElementById('response').value = typeof response === 'string' ? response : new XMLSerializer().serializeToString(response);
+
             } finally {
                 button.disabled = false;
                 button.innerHTML = 'Gönder';
@@ -132,12 +141,116 @@
             }
         }
 
-        async function listUsers() {
+        async function listUsers(existingResponse = null) {
             if (!Utils.checkSession()) return;
 
-            $('#input').val(XML_TEMPLATES.getUsers(sessionId));
-            await sendQuery();
+            try {
+                let response;
+                if (existingResponse) {
+                    response = existingResponse;
+                } else {
+                    $('#input').val(XML_TEMPLATES.getUsers(sessionId));
+                    response = await Utils.sendAPIRequest($('#input').val());
+                }
+                
+                // Response'u string olarak yazdır
+                document.getElementById('response').value = typeof response === 'string' ? response : new XMLSerializer().serializeToString(response);
+                
+                // XML yanıtını parse et
+                let xmlDoc;
+                if (typeof response === 'string') {
+                    xmlDoc = new DOMParser().parseFromString(response, "text/xml");
+                } else {
+                    xmlDoc = response;
+                }
+                
+                console.log('XML Document:', xmlDoc);
+                
+                // IceWarp API'nin yanıt yapısına göre kullanıcıları bul
+                const accounts = xmlDoc.querySelectorAll("query > result > item");
+                console.log('Bulunan kullanıcı sayısı:', accounts.length);
+                
+                let tableHtml = '';
+                
+                Array.from(accounts).forEach(account => {
+                    console.log('Account XML:', new XMLSerializer().serializeToString(account));
+                    
+                    const email = account.querySelector('email')?.textContent || '';
+                    const name = account.querySelector('name')?.textContent || '';
+                    const quotaElement = account.querySelector('quota');
+                    const quotaSize = quotaElement?.querySelector('mailboxsize')?.textContent || '0';
+                    const quotaLimit = quotaElement?.querySelector('mailboxquota')?.textContent || '0';
+                    
+                    console.log('Parsed data:', { email, name, quotaSize, quotaLimit });
+                    
+                    if (!email) {
+                        console.warn('Email bulunamadı:', account);
+                        return;
+                    }
+                    
+                    const userData = {
+                        email: email,
+                        displayName: name || email.split('@')[0],
+                        quota: quotaLimit
+                    };
+                    
+                    tableHtml += `
+                        <tr>
+                            <td>${email}</td>
+                            <td>${name || '-'}</td>
+                            <td>${quotaLimit === '0' ? 'Sınırsız' : quotaLimit + ' MB'} 
+                                <small class="text-muted">(Kullanılan: ${quotaSize} MB)</small></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1" 
+                                        onclick='showEditUserModal(${JSON.stringify(userData).replace(/'/g, "&#39;")})'>
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="deleteUser('${email}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                const userTableBody = document.getElementById('userTableBody');
+                if (tableHtml) {
+                    userTableBody.innerHTML = tableHtml;
+                    Utils.showToast(`${accounts.length} kullanıcı listelendi`, 'success');
+                } else {
+                    userTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center">Kullanıcı bulunamadı</td>
+                        </tr>
+                    `;
+                    Utils.showToast('Kullanıcı bulunamadı', 'info');
+                }
+                
+            } catch (error) {
+                console.error('Kullanıcı listesi alınırken hata:', error);
+                Utils.showToast('Kullanıcı listesi alınamadı!', 'error');
+                
+                document.getElementById('userTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Hata oluştu: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
         }
+
+        // Sayfa yüklendiğinde kullanıcı listesini otomatik yükle
+        $(document).ready(function() {
+            Utils.initializeTooltips();
+            userModal = new bootstrap.Modal(document.getElementById('userModal'));
+            
+            // Oturum varsa kullanıcıları listele
+            if (sessionId) {
+                listUsers();
+            }
+        });
     </script>
 </head>
 
@@ -147,8 +260,8 @@
 
     <div class="container-fluid">
         <div class="row">
-            <!-- Tek Panel - API Test -->
-            <div class="col-12">
+            <!-- API Test Panel -->
+            <div class="col-12 mb-4">
                 <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">
                         <h5 class="card-title mb-0">IceWarp API Test Arayüzü</h5>
@@ -194,6 +307,32 @@
                                 <i class="bi bi-send"></i> Gönder
                             </button>
                         </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Kullanıcı Listesi Paneli -->
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Kullanıcı Listesi</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>E-posta</th>
+                                        <th>Görünen Ad</th>
+                                        <th>Kota (MB)</th>
+                                        <th>İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userTableBody">
+                                    <!-- Kullanıcılar buraya dinamik olarak eklenecek -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
