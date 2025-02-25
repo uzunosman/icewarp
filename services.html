@@ -91,9 +91,12 @@
 
             // Default değerleri set et
             const timestamp = new Date().getTime();
+            const randomNum = Math.floor(Math.random() * 900) + 100; // 100-999 arası rastgele sayı
+            
             document.getElementById('username').value = `test${timestamp}`;
             document.getElementById('displayName').value = `Test User ${timestamp}`;
-            document.getElementById('password').value = 'test123!';
+            // IceWarp şifre politikasına uygun şifre (en az 6 karakter, en az 1 rakam, en az 1 harf)
+            document.getElementById('password').value = `pass${randomNum}`; // örn: Pass123
             document.getElementById('quota').value = '1024';
 
             userModal.show();
@@ -112,23 +115,75 @@
         async function saveUser() {
             if (!Utils.checkSession()) return;
 
-            const userData = {
-                username: document.getElementById('username').value,
-                displayName: document.getElementById('displayName').value,
-                password: document.getElementById('password').value,
-                quota: document.getElementById('quota').value
-            };
+            try {
+                const password = document.getElementById('password').value;
+                
+                // Şifre politikası kontrolü
+                if (password.length < 6) {
+                    Utils.showToast('Şifre en az 6 karakter olmalıdır!', 'error');
+                    return;
+                }
+                
+                // Şifre karmaşıklık kontrolü
+                const hasNumbers = /[0-9]/.test(password);
+                const hasAlpha = /[a-zA-Z]/.test(password);
+                
+                if (!hasNumbers) {
+                    Utils.showToast('Şifre en az 1 rakam içermelidir!', 'error');
+                    return;
+                }
+                
+                if (!hasAlpha) {
+                    Utils.showToast('Şifre en az 1 harf içermelidir!', 'error');
+                    return;
+                }
 
-            if (isEditMode) {
-                userData.email = document.getElementById('userEmail').value;
-                $('#input').val(XML_TEMPLATES.updateUser(sessionId, userData));
-            } else {
-                $('#input').val(XML_TEMPLATES.createUser(sessionId, userData));
+                const userData = {
+                    username: document.getElementById('username').value,
+                    displayName: document.getElementById('displayName').value,
+                    password: password,
+                    quota: document.getElementById('quota').value,
+                    accountState: document.getElementById('accountState').value,
+                    accountType: document.getElementById('accountType').value,
+                    services: {
+                        mail: document.getElementById('serviceMail').checked ? '1' : '0',
+                        im: document.getElementById('serviceIM').checked ? '1' : '0',
+                        groupware: document.getElementById('serviceGroupware').checked ? '1' : '0',
+                        ftp: document.getElementById('serviceFTP').checked ? '1' : '0',
+                        sip: document.getElementById('serviceSIP').checked ? '1' : '0'
+                    }
+                };
+
+                // Domain bilgisini config'den al
+                const domain = CONFIG.DOMAIN;
+
+                // Yeni kullanıcı oluşturma XML'ini hazırla
+                const createUserXML = XML_TEMPLATES.createUser(
+                    sessionId,
+                    domain,
+                    userData
+                );
+
+                // API isteğini gönder
+                const response = await Utils.sendAPIRequest(createUserXML);
+
+                // Başarılı yanıt kontrolü
+                const $iq = $(response).find('iq');
+                if ($iq.attr('type') === 'result') {
+                    Utils.showToast('Kullanıcı başarıyla oluşturuldu!', 'success');
+                    $('#userModal').modal('hide');
+                    
+                    // Kullanıcı listesini yenile
+                    await listUsers();
+                } else {
+                    const error = $iq.find('error').text();
+                    Utils.showToast(`Hata: ${error || 'Kullanıcı oluşturulamadı'}`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Kullanıcı oluşturma hatası:', error);
+                Utils.showToast('Kullanıcı oluşturulurken bir hata oluştu!', 'error');
             }
-
-            userModal.hide();
-            await sendQuery();
-            await listUsers(); // Listeyi güncelle
         }
 
         async function deleteUser(email) {
@@ -164,25 +219,18 @@
                     xmlDoc = response;
                 }
                 
-                console.log('XML Document:', xmlDoc);
-                
                 // IceWarp API'nin yanıt yapısına göre kullanıcıları bul
                 const accounts = xmlDoc.querySelectorAll("query > result > item");
-                console.log('Bulunan kullanıcı sayısı:', accounts.length);
-                
+                                
                 let tableHtml = '';
                 
                 Array.from(accounts).forEach(account => {
-                    console.log('Account XML:', new XMLSerializer().serializeToString(account));
-                    
                     const email = account.querySelector('email')?.textContent || '';
                     const name = account.querySelector('name')?.textContent || '';
                     const quotaElement = account.querySelector('quota');
                     const quotaSize = quotaElement?.querySelector('mailboxsize')?.textContent || '0';
                     const quotaLimit = quotaElement?.querySelector('mailboxquota')?.textContent || '0';
-                    
-                    console.log('Parsed data:', { email, name, quotaSize, quotaLimit });
-                    
+                     
                     if (!email) {
                         console.warn('Email bulunamadı:', account);
                         return;
@@ -194,6 +242,9 @@
                         quota: quotaLimit
                     };
                     
+                    // Admin kullanıcısı kontrolü
+                    const isAdmin = email === 'api_admin@api.test' || name === 'Administrator';
+
                     tableHtml += `
                         <tr>
                             <td>${email}</td>
@@ -201,14 +252,16 @@
                             <td>${quotaLimit === '0' ? 'Sınırsız' : quotaLimit + ' MB'} 
                                 <small class="text-muted">(Kullanılan: ${quotaSize} MB)</small></td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary me-1" 
-                                        onclick='showEditUserModal(${JSON.stringify(userData).replace(/'/g, "&#39;")})'>
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" 
-                                        onclick="deleteUser('${email}')">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                                ${!isAdmin ? `
+                                    <button class="btn btn-sm btn-outline-primary me-1" 
+                                            onclick='showEditUserModal(${JSON.stringify(userData).replace(/'/g, "&#39;")})'>
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteUser('${email}')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                ` : '<small class="text-muted">Admin hesabı</small>'}
                             </td>
                         </tr>
                     `;
@@ -341,7 +394,7 @@
 
     <!-- Kullanıcı işlemleri için modal -->
     <div class="modal fade" id="userModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Kullanıcı Ekle/Düzenle</h5>
@@ -350,21 +403,89 @@
                 <div class="modal-body">
                     <form id="userForm">
                         <input type="hidden" id="userEmail">
-                        <div class="mb-3">
-                            <label class="form-label">Kullanıcı Adı</label>
-                            <input type="text" class="form-control" id="username" required>
+                        
+                        <!-- Temel Bilgiler -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Kullanıcı Adı*</label>
+                                <input type="text" class="form-control" id="username" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Görünen Ad*</label>
+                                <input type="text" class="form-control" id="displayName" required>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Görünen Ad</label>
-                            <input type="text" class="form-control" id="displayName" required>
+
+                        <!-- Güvenlik -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Şifre*</label>
+                                <input type="password" class="form-control" id="password" required>
+                                <small class="text-muted">
+                                    En az 6 karakter, en az 1 harf ve 1 rakam içermelidir.
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Hesap Durumu</label>
+                                <select class="form-select" id="accountState">
+                                    <option value="0">Aktif</option>
+                                    <option value="1">Devre Dışı</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Şifre</label>
-                            <input type="password" class="form-control" id="password" required>
+
+                        <!-- Kota ve Tip -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Kota (MB)</label>
+                                <input type="number" class="form-control" id="quota" value="1024">
+                                <small class="text-muted">0 = Sınırsız</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Hesap Tipi</label>
+                                <select class="form-select" id="accountType">
+                                    <option value="0">Standart</option>
+                                    <option value="1">Admin</option>
+                                    <option value="2">Domain Admin</option>
+                                </select>
+                            </div>
                         </div>
+
+                        <!-- Servisler -->
                         <div class="mb-3">
-                            <label class="form-label">Kota (MB)</label>
-                            <input type="number" class="form-control" id="quota" value="1024">
+                            <label class="form-label">Servisler</label>
+                            <div class="row g-3">
+                                <div class="col-auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="serviceMail" checked>
+                                        <label class="form-check-label" for="serviceMail">Mail</label>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="serviceIM" checked>
+                                        <label class="form-check-label" for="serviceIM">IM</label>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="serviceGroupware" checked>
+                                        <label class="form-check-label" for="serviceGroupware">Groupware</label>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="serviceFTP" checked>
+                                        <label class="form-check-label" for="serviceFTP">FTP</label>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="serviceSIP" checked>
+                                        <label class="form-check-label" for="serviceSIP">SIP</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>

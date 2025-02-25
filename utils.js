@@ -32,26 +32,45 @@ class Utils {
     }
 
     // Toast bildirimi gösterme
-    static showToast(message, type) {
-        const toast = document.createElement('div');
-        toast.className = `toast align-items-center text-white bg-${type} border-0`;
-        toast.setAttribute('role', 'alert');
-        toast.setAttribute('aria-live', 'assertive');
-        toast.setAttribute('aria-atomic', 'true');
-
-        toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body">${message}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    static showToast(message, type = 'info') {
+        const toastId = `toast-${Date.now()}`;
+        const bgColor = type === 'error' ? 'bg-danger' : 
+                        type === 'success' ? 'bg-success' : 
+                        type === 'warning' ? 'bg-warning' : 
+                        'bg-info';
+        const textColor = type === 'warning' ? 'text-dark' : 'text-white';
+        
+        const toastHtml = `
+            <div id="${toastId}" class="toast ${bgColor} ${textColor}" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header ${bgColor} ${textColor}">
+                    <strong class="me-auto">
+                        ${type === 'error' ? '<i class="bi bi-x-circle"></i> Hata' :
+                          type === 'success' ? '<i class="bi bi-check-circle"></i> Başarılı' :
+                          type === 'warning' ? '<i class="bi bi-exclamation-triangle"></i> Uyarı' :
+                          '<i class="bi bi-info-circle"></i> Bilgi'}
+                    </strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
             </div>
         `;
 
-        document.getElementById('toast-container').appendChild(toast);
-        const bsToast = new bootstrap.Toast(toast);
-        bsToast.show();
+        const container = document.getElementById('toast-container');
+        container.insertAdjacentHTML('beforeend', toastHtml);
 
-        toast.addEventListener('hidden.bs.toast', function () {
-            toast.remove();
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, {
+            autohide: true,
+            delay: 3000
+        });
+        
+        toast.show();
+
+        // Toast'ı gösterdikten sonra DOM'dan kaldır
+        toastElement.addEventListener('hidden.bs.toast', () => {
+            toastElement.remove();
         });
     }
 

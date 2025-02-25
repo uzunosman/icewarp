@@ -31,52 +31,143 @@ const XML_TEMPLATES = {
 
     getDomains: (sessionId) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>getdomains</commandname>
+        <commandname>getdomainsinfolist</commandname>
         <commandparams>
-            <listtype>0</listtype>
-            <listparams>
-                <domain>*</domain>
-            </listparams>
+            <filter>
+                <namemask>*</namemask>
+                <typemask>*</typemask>
+            </filter>
+            <offset>0</offset>
+            <count>100</count>
         </commandparams>
     </query>
 </iq>`,
 
     getServerInfo: (sessionId) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>getserviceinfo</commandname>
+        <commandname>getservicesinfolist</commandname>
         <commandparams>
-            <info>
-                <item>version</item>
-                <item>build</item>
-                <item>os</item>
-                <item>platform</item>
-                <item>installpath</item>
-                <item>licenseid</item>
-            </info>
+            <filter>
+                <mask>*</mask>
+            </filter>
+            <offset>0</offset>
+            <count>100</count>
         </commandparams>
     </query>
 </iq>`,
 
-    createUser: (sessionId, userData) => `<iq sid="${sessionId}">
+    createUser: (sessionId, domain, userData) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>createobject</commandname>
+        <commandname>createaccount</commandname>
         <commandparams>
-            <account>
-                <domain>${CONFIG.DOMAIN}</domain>
-                <name>${userData.username}</name>
-                <password>${userData.password}</password>
-                <displayname>${userData.displayName}</displayname>
-                <quota>${userData.quota || 1024}</quota>
-                <type>0</type>
-                <enabled>1</enabled>
-                <services>
-                    <service name="mail">1</service>
-                    <service name="im">1</service>
-                    <service name="groupware">1</service>
-                    <service name="ftp">1</service>
-                    <service name="sip">1</service>
-                </services>
-            </account>
+            <domainstr>${domain}</domainstr>
+            <accountproperties>
+                <item>
+                    <apiproperty>
+                        <propname>u_name</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.username}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_displayname</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.displayName}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_password</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.password}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_email</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.username}@${domain}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_fullname</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.displayName}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_type</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.accountType === '1' ? 'admin' : 'user'}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_mailbox</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>1</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_mailboxquota</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.quota}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                <item>
+                    <apiproperty>
+                        <propname>u_enabled</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystring</classname>
+                        <val>${userData.accountState === '1' ? '0' : '1'}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                ${userData.services ? `
+                <item>
+                    <apiproperty>
+                        <propname>u_services</propname>
+                    </apiproperty>
+                    <propertyval>
+                        <classname>tpropertystringlist</classname>
+                        <val>${Object.entries(userData.services)
+                            .filter(([_, value]) => value)
+                            .map(([service, value]) => `<item>${service}=${value}</item>`)
+                            .join('')}</val>
+                    </propertyval>
+                    <propertyright>full</propertyright>
+                </item>
+                ` : ""}
+            </accountproperties>
         </commandparams>
     </query>
 </iq>`,
@@ -95,10 +186,17 @@ const XML_TEMPLATES = {
 
     deleteUser: (sessionId, email) => `<iq sid="${sessionId}">
     <query xmlns="admin:iq:rpc">
-        <commandname>deleteaccount</commandname>
+        <commandname>deleteaccounts</commandname>
         <commandparams>
-            <email>${email}</email>
+            <domainstr>${email.split('@')[1]}</domainstr>
+            <accountlist>
+                <classname>tpropertystringlist</classname>
+                <val>
+                    <item>${email}</item>
+                </val>
+            </accountlist>
+            <leavedata>0</leavedata>
         </commandparams>
     </query>
 </iq>`
-}; 
+};
